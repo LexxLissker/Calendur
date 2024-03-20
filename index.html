@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>FullCalendar Scheduler Clone events</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/3.9.0/fullcalendar.min.css'>
+    <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css'>
+    <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/fullcalendar-scheduler/1.9.4/scheduler.min.css'>
+    <!-- <link rel="stylesheet" href="./style.css"> -->
+
+    <!-- jQuery UI CSS -->
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.22.2/moment.min.js'></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.22.2/locale/ru.js"></script> 
+    <link href="https://service.uventa.com/public/css/1Cccs.css" rel="stylesheet">
+</head>
+
+<body>
+    <div id="calendar"></div>
+
+    <!-- Блок подсказки -->
+    <div id="tooltip" class="ui-widget-content" <%windowHelpVisible%>>
+        <div class="ui-widget-header">
+            <div class="headbartooltip">
+                <span class="me-5 fs-16">Справка</span>
+                <span class="close-btn fs-30 " style="cursor: pointer; float: right;margin-top: -14px;">×</span>
+                <span class="collapse-btn fs-30" style="cursor: pointer; float: right; margin-right: 10px;margin-top: -14px;">−</span>
+            </div>
+        </div>
+        <div id="helpText" class="svernisnahyi"></div>
+    </div>
+
+    
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js'></script>
+    <script src='https://code.jquery.com/ui/1.11.3/jquery-ui.min.js'></script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.js'></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/2.10.2/umd/popper.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
+
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/3.9.0/fullcalendar.min.js'></script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/fullcalendar-scheduler/1.9.4/scheduler.min.js'></script>
+
+    <script type="text/javascript">
+
+
+    document.addEventListener('DOMContentLoaded', function () {
+		document.querySelector('#createDialog').addEventListener('show.bs.modal', function () {
+    });            
+    
+	function getResourceName(resourceId) {
+		for (let i = 0; i < resources.length; i++) {
+			if (resources[i].id == resourceId){
+				return resources[i].title;
+			}      
+		}
+		return '';
+	}
+    
+
+            function findEventAtTimeRange(resourceId, start, end, eventIdToExclude) {
+                for (let i = 0; i < calendarEvents.length; i++) {
+                    const event = calendarEvents[i];
+
+                    if (event.id !== eventIdToExclude &&
+                        event.resourceId === resourceId &&
+                        (
+                            (moment(start).isAfter(event.start) && moment(start).isBefore(event.end)) ||
+                            (moment(end).isAfter(event.start) && moment(end).isBefore(event.end)) ||
+                            (moment(start).isSameOrBefore(event.start) && moment(end).isSameOrAfter(event.end))
+                        )
+                         )
+                          {
+                        return event;
+                    }
+                }
+                return null;
+            }
+
+            function isAnOverlapEventForAuditorium(newEvent) {
+                return findEventAtTimeRange(newEvent.resourceId, newEvent.start, newEvent.end, newEvent.id) !== null;
+            }
+
+            function canEventBeResized(newEvent) {
+                const existingEvent = findEventAtTimeRange(newEvent.resourceId, newEvent.start, newEvent.end, newEvent.id);
+                return existingEvent === null;
+            }
+
+            document.querySelector('#createDialogYes').addEventListener('click', function () {    
+                
+                const event = {
+                        id: newEventData.id,
+                        requestId: newEventData.requestId,
+                        orderId: '', 
+                        state: defaultState,
+                        title: newEventData.title,  
+                        start: selectedStart,
+                        end: selectedEnd,
+                        resourceId: selectedResourceId,
+                        customer: newEventData.customer,    
+                        car: newEventData.car,    
+                        carNumber: newEventData.carNumber,    
+                        phone: newEventData.phone,    
+                        author: newEventData.author,    
+                        editable: true,
+                        backgroundColor: defaultBackgroundColor
+				};                                       
+				
+               	// 1С - начало блока
+               	sendUpdateRecord(event);    
+               	// 1С - конец блока 
+                
+				calendarEvents.push(event);
+				updateCalendar();
+				$("#calendar").fullCalendar("unselect");
+				$('#createDialog').modal('hide');  
+				mode = 'LIST';
+				divHelpText.innerHTML = helpTextDefault;	
+            });      
+            
+            document.querySelector('#createDialogNo').addEventListener('click', function () {  
+				mode = 'LIST';
+				divHelpText.innerHTML = helpTextDefault;	
+            	sendChangeMode();  
+            });      
+                          
+            document.querySelector('#createDialogCancel').addEventListener('click', function () {    
+				mode = 'LIST';
+				divHelpText.innerHTML = helpTextDefault;	
+            	sendChangeMode();  
+            });      
+
+            document.querySelector('#updateDialogYes').addEventListener('click', function () {    
+               	sendUpdateRecord(selectedEvent); 
+               	updateCalendar();   
+				$('#updateDialog').modal('hide');  
+            });      
+            
+            document.querySelector('#updateDialogNo').addEventListener('click', function () {    
+            	currentRevertFunc();    
+ 				$('#updateDialog').modal('hide');  
+			});                      
+           
+ 			//Позвонить
+           document.querySelector('#btnCall').addEventListener('click', function () {    
+       			sendCall(selectedEvent);     
+                $('#actionDialog').modal('hide');
+			}); 
+                
+			//Отправить СМС
+            document.querySelector('#btnWrite').addEventListener('click', function () {    
+       			sendWriteSMS(selectedEvent);    
+                $('#actionDialog').modal('hide');
+			}); 
+                          
+			//Создать заказ-наряд
+            document.querySelector('#btnZn').addEventListener('click', function () {    
+       			sendCreateOrder(selectedEvent);    
+                $('#actionDialog').modal('hide');
+			});            
+
+			document.querySelector('#btnDelete').addEventListener('click', function () {    
+                $('#actionDialog').modal('hide');
+				var deleteDialogTitle = document.querySelector('#deleteDialogTitle');
+				deleteDialogTitle.innerHTML = 'Заявка: <b>' + selectedEvent.title + '</b><br> Цех: ' + getResourceName(selectedEvent.resourceId) + '<br> Дата начало: ' + selectedEvent.start.format('DD.MM.YYYY HH:mm') + '<br> Дата окончание: ' +  selectedEvent.end.format('DD.MM.YYYY HH:mm');
+				$('#deleteDialog').modal('toggle'); 
+			});
+
+            // Удаление события
+            document.querySelector('#deleteDialogYes').addEventListener('click', function () {   
+       			sendDeleteRecord(selectedEvent);    
+      			
+                calendarEvents = calendarEvents.filter(event => event.id !== selectedEvent.id);
+                updateCalendar();
+                $('#deleteDialog').modal('hide');
+            });
+
+            // Функция для обновления события в массиве
+            function updateEventInArray(updatedEvent) {
+                const index = calendarEvents.findIndex(event => event.id === updatedEvent.id);
+                if (index !== -1) {
+                    calendarEvents[index] = updatedEvent;
+                }
+            }
+
+
+            // настройка календаря по-умолчанию 
+            $('#calendar').fullCalendar({    
+				defaultDate: defaultCurrentDate,
+				nowIndicator: true,
+                editable: true,
+                droppable: true,
+                allDaySlot: false,
+                allDayDefault: false,
+                navLinks: true,
+                selectable: true,
+                selectHelper: false,
+                eventLimit: true,
+                aspectRatio: 2.2,
+                locale: 'ru', // Устанавливаем локаль на русскую
+                slotLabelInterval: defaultScale, //"00:30", // шкала для горизонтального представления
+                scrollTime: '09:00',
+                slotDuration: defaultScale, //'00:30', // шкала для вертикального представления 
+                minTime: '09:00:00', // Минимальное время 
+                maxTime: '21:00:00', // Максимальное время     
+                slotWidth: 80, // Задает ширину каждого слота (в пикселях)
+                slotLabelFormat: [
+                    
+                    'HH:mm', // Основное время (09:00, 10:00, и т.д.)
+                    // 'HH:mm', // Вторичное время (9:00, 9:15, 9:30, 9:45, и т.д.)
+                ],
+
+                defaultView: defaultView, // 'agendaDay', //'timelineDay',
+                views: {
+                    timelineDay: {
+                        type: 'timeline',
+                        duration: { days: 2 },
+                        buttonText: 'Горизонтально' // Название для горизонтального вида
+                    },
+                    agendaDay: {
+                        buttonText: 'Вертикально' // Название для вертикального вида
+                    }
+                },
+                header: {
+                    left: 'today prev,next',
+                    center: 'title',
+                    right: 'button-tooltip',
+                   	//right: 'button-tooltip, agendaDay, timelineDay',
+                },
+                resourceLabelText: 'Ресурсы',
+                resources: resources,
+                events: calendarEvents,
+                                viewRender: function(view, element) {
+                    updateColumnWidth(); // Вызываем функцию обновления ширины столбцов
+                },
+
+                select: function (start, end, jsEvent, view, resource) {   
+ 
+					selectedStart = start;
+                    selectedEnd = end;
+                    selectedResourceId = resource.id;  
+
+					if (mode == "CREATE"){
+						var alertTitle = document.querySelector('#alertTitle');
+	               		alertTitle.innerHTML = 'Заявка: <b>' + newEventData.title + '</b><br> Цех: ' + getResourceName(selectedResourceId) + '<br> Дата начало: ' + selectedStart.format('DD.MM.YYYY HH:mm') + '<br> Дата окончание: ' +  selectedEnd.format('DD.MM.YYYY HH:mm');
+						$('#createDialog').modal('toggle'); 
+					}    
+					else {
+						sendCreateRequest();
+					}
+                },    
+                
+                eventRender: function (event, element, view) {
+                   
+                    element.bind('contextmenu', function (e) {   
+						e.preventDefault();        
+
+                    	if(event.editable == true) {
+ 							document.getElementById('btnZn').removeAttribute('disabled');
+ 							document.getElementById('btnDelete').removeAttribute('disabled');
+                    	}   
+                    	else{
+                    		document.getElementById('btnZn').setAttribute('disabled', true); 
+                    		document.getElementById('btnDelete').setAttribute('disabled', true); 
+						}
+						
+						selectedEvent = event;   
+                        $('#actionDialog').modal('toggle'); 
+                	});
+                           
+					element.popover({
+                        title: '<div class="popoverTitleCalendar" style="background-color:'+ event.backgroundColor +'; color:'+ event.textColor +'">'+ event.title +'</div>',
+                        content: 
+                            '<div class="popoverInfoCalendar">' +
+                            '<p><strong>Начало:</strong> ' + event.start.format('DD.MM.YYYY HH:mm') + '</p>' +
+                            '<p><strong>Окончание:</strong> ' + event.end.format('DD.MM.YYYY HH:mm') + '</p>' +
+                            '<p><strong>Ресурс:</strong> ' + getResourceName(event.resourceId) + '</p>' +
+                           	'<p><strong>Статус:</strong> ' + event.state + '</p>' +  
+                            '<p><strong>Автомобиль:</strong> ' + event.car + '</p>' + 
+                            '<p><strong>Гос.номер:</strong> ' + event.carNumber + '</p>' + 
+                            '<p><strong>Телефон:</strong> ' + event.phone + '</p>' +
+                            '<p><strong>Контрагент:</strong> ' + event.customer + '</p>' +
+                            '<p><strong>Автор:</strong> ' + event.author + '</p>' +
+                            //'<div class="popoverDescCalendar"><strong>Описание:</strong> '+ event.description +'</div>' +
+                            '</div>', 
+                        delay: { 
+                            show: "300", 
+                            hide: "50"
+                        },
+                        trigger: 'hover',
+                        placement: 'top',
+                        html: true,
+                        color: 'red' ,
+                        container: 'body'
+                    });
+
+
+                    // Добавляем заголовок с датой начала и окончания события
+                    const dateInfo = '<div class="event-date-info">' +
+                    '<p>' + event.start.format('HH:mm') + '-' + event.end.format('HH:mm') + ' г/н: ' + event.carNumber + '</p>' +
+                    '</div>';
+
+                    // Склеиваем заголовок с основным заголовком события
+                    const titleWithDateInfo = '<div class="event-title">' + event.title + '</div>' + dateInfo;
+                    element.find('.fc-title').html(titleWithDateInfo);
+
+					element.bind('click', function (e) {
+						if (e.which === 1) {
+							// alert('Левая кнопка мыши сработала!');
+						}
+					});
+
+                    element.hover(
+                        function () {
+                            $(this).addClass('highlighted-event');
+                        },
+                        function () {
+                            $(this).removeClass('highlighted-event');
+                        }
+                    );
+                }, 
+                
+                eventClick: function (calEvent, jsEvent, view) {
+                    $('.highlighted-event.active').removeClass('active');
+                    $(this).addClass('active');
+                    
+                   	// 1С - начало блока
+           			sendSelectRecord(calEvent);    
+           			// 1С - конец блока 
+                },
+
+                eventDrop: function (event, delta, revertFunc, jsEvent, ui, view) { 
+					
+					selectedEvent = event;                                        
+                              
+					currentRevertFunc = revertFunc;     
+						
+               		var updateDialogTitle = document.querySelector('#updateDialogTitle');
+              		updateDialogTitle.innerHTML = 'Заявка: <b>' + selectedEvent.title + '</b><br> Цех: ' + getResourceName(selectedEvent.resourceId) + '<br> Дата начало: ' + selectedEvent.start.format('DD.MM.YYYY HH:mm') + '<br> Дата окончание: ' +  selectedEvent.end.format('DD.MM.YYYY HH:mm');
+					$('#updateDialog').modal('toggle'); 
+
+                    // обновляем массив событий после перемещения 
+                    updateEventInArray({
+                        id: event.id,
+                        title: event.title,
+                        start: event.start.format(),
+                        end: event.end.format(),
+                        resourceId: event.resourceId,  
+                        requestId: event.requestId,  
+                        orderId: event.orderId,  
+                        state: event.state,  
+                        customer: event.customer,    
+                        car: event.car,    
+                        carNumber: event.carNumber,    
+                        phone: event.phone,    
+                        author: event.author,    
+                        editable: event.editable,  
+                        backgroundColor: event.backgroundColor  
+                    });
+                },       
+                eventResize: function (event, delta, revertFunc, jsEvent, ui, view) {
+					
+					$('.highlighted-event.active').removeClass('active');
+					$(this).addClass('active');
+                        
+					selectedEvent = event;                                        
+                              
+					currentRevertFunc = revertFunc;     
+						
+					var updateDialogTitle = document.querySelector('#updateDialogTitle');
+					updateDialogTitle.innerHTML = 'Заявка: <b>' + selectedEvent.title + '</b><br> Цех: ' + getResourceName(selectedEvent.resourceId) + '<br> Дата начало: ' + selectedEvent.start.format('DD.MM.YYYY HH:mm') + '<br> Дата окончание: ' +  selectedEvent.end.format('DD.MM.YYYY HH:mm');
+					$('#updateDialog').modal('toggle'); 
+
+                    // обновляем массив событий после перемещения
+                    updateEventInArray({
+                        id: event.id,
+                        title: event.title,
+                        start: event.start.format(),
+                        end: event.end.format(),
+                        resourceId: event.resourceId,
+                        requestId: event.requestId,  
+                        orderId: event.orderId,  
+                        state: event.state,    
+                        customer: event.customer,    
+                        car: event.car,    
+                        carNumber: event.carNumber,    
+                        phone: event.phone,    
+                        author: event.author,    
+                        editable: event.editable,  
+                        backgroundColor: event.backgroundColor  
+                    });
+                },
+            });
+
+            document.querySelector('#calendar').addEventListener('mouseleave', function () {
+                $('.highlighted-event').removeClass('highlighted-event');
+            });
+
+
+
+            // СТРЕЛКИ И ПЕРЕМЕЩЕНИЕ НА СЕГОДНЯ
+
+            function arrows() {
+                const todayButton = document.querySelector('.fc-today-button');
+                const prevButton = document.querySelector('.fc-prev-button');
+                const nextButton = document.querySelector('.fc-next-button');
+
+                todayButton.addEventListener('click', function () {
+                	// 1С - начало
+					sendChangeDate();  
+					// 1С - конец
+                });
+
+                prevButton.addEventListener('click', function () {
+                	// 1С - начало
+					sendChangeDate();  
+					// 1С - конец
+                });
+
+                nextButton.addEventListener('click', function () {
+                	// 1С - начало
+					sendChangeDate();  
+					// 1С - конец
+                }); 
+            }
+
+            arrows(); 
+
+  
+                // Инициализация перетаскивания и изменения размера блока подсказки
+                $("#tooltip").draggable();//можем впихнуть это, для изменения развера  .resizable()
+
+                // Добавляем обработчики событий для кнопок сворачивания и закрытия
+             
+
+                $('.close-btn').click(function () {
+                    $('#tooltip').hide();
+                });
+
+                $('.collapse-btn').click(function () {
+                    $('.svernisnahyi').toggle();
+                });
+ 
+            // переход по ссылке к нужному ивенту     <a href="#?date=2024-01-13&eventId=1">Перейти к событию 2</a>
+ 
+                    $(document).ready(function () {
+
+                        function getUrlParams() {
+                            const params = {};
+                            window.location.href.replace(/[?&]+([^=&]+)=([^&]*)/gi, function (m, key, value) {
+                                params[key] = value;
+                            });
+                            return params;
+                        }
+
+                        function scrollToAnchor() {
+                            var params = getUrlParams();
+                            var dateParam = params['date'];
+                            var eventIdParam = params['eventId'];
+
+                            if (dateParam) {
+                                var date = moment(dateParam, "YYYY-MM-DD", true);
+                                if (date.isValid()) {
+                                    $("#calendar").fullCalendar("gotoDate", date.toDate());
+
+                                    if (eventIdParam) {
+                                        var matchingEvent = calendarEvents.find(function (event) {
+                                            return (
+                                                moment(event.start).isSame(date, "day") &&
+                                                event.id === eventIdParam
+                                            );
+                                        });
+
+                                        if (matchingEvent) {
+                                            console.log("Found matching event:", matchingEvent);
+                                            // Do something with the matching event, e.g., highlight it
+                                            $('#calendar').fullCalendar('clientEvents', eventIdParam).forEach(event => {
+                                                event.className = (event.className || []).concat('active');
+                                                $(event.el).addClass('active');
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        scrollToAnchor();
+                    });
+
+                // сделали див с классом
+                const tooltipButtonRight = document.createElement("div");
+                tooltipButtonRight.classList.add('tooltipRight');
+
+                // Создаем новый элемент button
+                const helpButton = document.createElement('button');
+                helpButton.textContent = '?';
+                helpButton.classList.add('helpButton');
+                // helpButton.classList.add('helpButton');
+                helpButton.classList.add('fc-state-default');
+
+                // Добавляем h1 к div с классом tooltipRight
+                tooltipButtonRight.appendChild(helpButton);
+
+                // Находим существующий элемент с классом 'fc-right'
+                const fcRightEl = document.querySelector('.fc-right');
+
+                // Добавляем div с классом tooltipRight к элементу с классом 'h1class'
+                fcRightEl.appendChild(helpButton);
+
+                const windowHelp = document.querySelector('#tooltip');
+
+                helpButton.addEventListener('click', ()=>{
+                    windowHelp.style.display = 'block';
+                })                                        
+       
+                const fcToday = document.querySelector('.fc-today-button').textContent = 'Сегодня';
+                // const timelineDay = document.querySelector('.fc-timelineDay-button').textContent = 'День';
+
+ 
+        });
+
+		function getResourceType(resourceId) {
+			for (let i = 0; i < resources.length; i++) {
+				if (resources[i].id == resourceId){
+					return resources[i].type;
+				}      
+			}
+			return 0;
+		}
+             
+		// 1С - начало
+		function sendChangeDate() {  
+			var evt = document.createEvent("MouseEvents");
+			evt.initMouseEvent("click", true, true, window, 1, 0, 0, 0, 0, false, false, false, false, 0, null);
+			evt.mode = 'sendData'; 
+			evt.commandName = 'changeDate'; 
+			evt.date = $('#calendar').fullCalendar('getDate').format();
+			document.body.dispatchEvent(evt);    
+		}             
+			
+		function sendUpdateRecord(event) {
+			var evt = document.createEvent("MouseEvents");
+			evt.initMouseEvent("click", true, true, window, 1, 0, 0, 0, 0, false, false, false, false, 0, null);
+			evt.mode = 'sendData'; 
+			evt.commandName = 'updateRecord'; 
+			evt.eventId = event.id;
+			evt.requestId = event.requestId;
+			evt.resourceId = event.resourceId;  
+			evt.resourceType = getResourceType(event.resourceId);
+			evt.timeFrom = event.start.format();
+			evt.timeТо = event.end.format();
+			document.body.dispatchEvent(evt);        
+		}                
+		
+		function sendDeleteRecord(event) {
+			var evt = document.createEvent("MouseEvents");
+			evt.initMouseEvent("click", true, true, window, 1, 0, 0, 0, 0, false, false, false, false, 0, null);
+			evt.mode = 'sendData'; 
+			evt.commandName = 'deleteRecord'; 
+			evt.objectId = event.id;
+			document.body.dispatchEvent(evt);        
+		}                
+
+		function sendCreateRequest() {
+			var evt = document.createEvent("MouseEvents");
+			evt.initMouseEvent("click", true, true, window, 1, 0, 0, 0, 0, false, false, false, false, 0, null);
+			evt.mode = 'sendData'; 
+			evt.commandName = 'createRequest'; 
+			evt.resourceId = selectedResourceId;  
+			evt.resourceType = getResourceType(selectedResourceId);
+			evt.timeFrom = selectedStart.format();
+			evt.timeТо = selectedEnd.format();
+			document.body.dispatchEvent(evt);        
+		}     
+
+		function sendSelectRecord(event) {
+			var evt = document.createEvent("MouseEvents");
+			evt.initMouseEvent("click", true, true, window, 1, 0, 0, 0, 0, false, false, false, false, 0, null);
+			evt.mode = 'sendData'; 
+			evt.commandName = 'selectRecord'; 
+			if(event.editable == true) {
+				evt.objectId = event.requestId;  
+				evt.objectType = 1;
+			}                
+			else{
+				evt.objectId = event.orderId;  
+				evt.objectType = 2;
+			} 
+			document.body.dispatchEvent(evt);        
+		}                
+
+		function sendCall(event) {
+			var evt = document.createEvent("MouseEvents");
+			evt.initMouseEvent("click", true, true, window, 1, 0, 0, 0, 0, false, false, false, false, 0, null);
+			evt.mode = 'sendData'; 
+			evt.commandName = 'call'; 
+			if(event.editable == true) {
+				evt.objectId = event.requestId;  
+				evt.objectType = 1;
+			}                
+			else{
+				evt.objectId = event.orderId;  
+				evt.objectType = 2;
+			} 
+			document.body.dispatchEvent(evt);        
+		}                
+
+		function sendWriteSMS(event) {
+			var evt = document.createEvent("MouseEvents");
+			evt.initMouseEvent("click", true, true, window, 1, 0, 0, 0, 0, false, false, false, false, 0, null);
+			evt.mode = 'sendData'; 
+			evt.commandName = 'writeSMS'; 
+			if(event.editable == true) {
+				evt.objectId = event.requestId;  
+				evt.objectType = 1;
+			}                
+			else{
+				evt.objectId = event.orderId;  
+				evt.objectType = 2;
+			} 
+			document.body.dispatchEvent(evt);        
+		}     
+		           
+		function sendCreateOrder(event) {
+			var evt = document.createEvent("MouseEvents");
+			evt.initMouseEvent("click", true, true, window, 1, 0, 0, 0, 0, false, false, false, false, 0, null);
+			evt.mode = 'sendData'; 
+			evt.commandName = 'createOrder'; 
+			evt.objectId = event.requestId;  
+			document.body.dispatchEvent(evt);        
+		}       
+		
+		function sendChangeMode() {
+			var evt = document.createEvent("MouseEvents");
+			evt.initMouseEvent("click", true, true, window, 1, 0, 0, 0, 0, false, false, false, false, 0, null);
+			evt.mode = 'sendData'; 
+			evt.commandName = 'changeMode'; 
+			evt.newMode = mode;  
+			document.body.dispatchEvent(evt);        
+		}       
+		// 1С - конец
+
+		function addEventsToCalendar(newEvents){   
+      	 	newEvents.forEach(function(event, i, newEvents) {   
+      			calendarEvents.push(event);
+     		});		
+ 			updateCalendar();
+		}  
+               
+		function gotoDate(date){   
+      	 	$("#calendar").fullCalendar("gotoDate", date);
+		}  
+               
+		// Обновление календаря
+		function updateCalendar() {
+			$("#calendar").fullCalendar("removeEvents");
+			$("#calendar").fullCalendar("addEventSource", calendarEvents);
+			$("#calendar").fullCalendar("rerenderEvents");   
+		}
+                                             
+        var updateColumnWidth = function() {
+            var resourceCellCount = $('.fc-resource-cell').length;
+
+             if (resourceCellCount > 40) {
+                $('.fc-agenda-view').css('width', '20000px');
+            } else if (resourceCellCount > 30) {
+                $('.fc-agenda-view').css('width', '7000px');
+            } else if (resourceCellCount > 20) {
+                $('.fc-agenda-view').css('width', '5000px');
+            } else if (resourceCellCount > 10) {
+                $('.fc-agenda-view').css('width', '4000px');
+            } else {
+                $('.fc-agenda-view').css('width', ''); // Сбрасываем ширину
+            }
+        };
+
+		$(document).ready(function() {
+			updateColumnWidth();    
+			updateHelpText();
+		});
+
+		let mode = <%mode%>; 
+		let resources = [<%resources%>];                             
+		let calendarEvents = [<%calendarEvents%>]; 
+
+		let defaultScale = <%defaultScale%>;                                             
+        let defaultView = <%defaultView%>;
+		let defaultCurrentDate = <%defaultCurrentDate%>; 
+		let defaultState = <%defaultState%>;
+		let defaultBackgroundColor = <%defaultBackgroundColor%>;   
+		
+		let newEventData = <%newEventData%>;
+		
+		let selectedStart;
+		let selectedEnd;
+		let selectedResourceId;
+		let selectedEvent;     
+		let currentRevertFunc;      
+		
+		let helpTextDefault = 
+		    '<ul class="p-3 nahui fs-12 bg-white m-0">' + 
+		        '<li style="list-style: none;"><b>Режим просмотра календаря.</b> Основные операции:<br><br></li>' +
+		        '<li style="list-style: none;"><b>Создать запись:</b> удерживая левую клавишу мыши, <br> выберете пустую область на календаре<br><br></li>' +
+		        '<li style="list-style: none;"><b>Изменить запись:</b> выберете существующую запись и, <br> удерживая левую клавишу мыши, переместите (растяните)<br> ее, захватив пустую область на календаре<br><br></li>' +
+		        '<li style="list-style: none;"><b>Удалить запись:</b> нажмите правую клавишу мыши <br> на существующей записи<br><br></li>' +
+		        '<li style="list-style: none;"><b>Открыть заявку на ремонт:</b> нажмите левую клавишу <br> мыши на существующей записи</li>' +
+		    '</ul>' +
+		    '<div class="bg-white m-0 p-3">' +
+		        '<div class="agendaColors  fs-12 ">' +
+		            '<div class="zayavka"><p>Заявка</p></div>' +
+		            '<div class="soglasovanie"><p>Согласование</p></div>' +
+		            '<div class="vRabote"><p>В работе</p></div>' +
+		            '<div class="oshidaetPostavki"><p>Ожидает поставки</p></div>' +
+		            '<div class="zapasnyeCNS"><p>Запасные части на складе</p></div>' +
+		            '<div class="vypolnen"><p>Выполнен</p></div>' +
+		        '</div>' +
+		    '</div>'; 
+		let helpTextCreate = 
+			'<ul class="p-3 nahui fs-12 bg-white m-0">' +
+				'<li style="list-style: none;"><b>Режим создания записи:</b> удерживая левую клавишу мыши, <br> выберете пустую область на календаре<br><br></li>' +
+			'</ul>'; 
+		
+		const divHelpText = document.querySelector('#helpText'); 
+                
+		function updateHelpText() {
+			if (mode == "CREATE"){
+				divHelpText.innerHTML = helpTextCreate;
+			}                               
+			else {
+				divHelpText.innerHTML = helpTextDefault;  
+			}
+		}                                                           
+		
+    </script>
+
+    <!-- createDialog -->
+    <div class="modal fade" id="createDialog" tabindex="-1" aria-labelledby="createDialogLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="createDialogLabel">Создать запись на ремонт?</h5>
+                    <button type="button" id="createDialogCancel" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="alertTitle"></div>
+                <div class="modal-footer">
+                    <button type="button" id="createDialogYes" class="btn btn-primary">Создать запись</button>
+                    <button type="button" id="createDialogNo" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- updateDialog -->
+    <div class="modal fade" id="updateDialog" tabindex="-1" aria-labelledby="updateDialogLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="updateDialogLabel">Изменить запись на ремонт?</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="updateDialogTitle"></div>
+                <div class="modal-footer">
+                    <button type="button" id="updateDialogYes" class="btn btn-primary">Изменить запись</button>
+                    <button type="button" id="updateDialogNo" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- deleteDialog -->
+    <div class="modal fade" id="deleteDialog" tabindex="-1" role="dialog" aria-labelledby="delete-modal-title" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="delete-modal-title">Удалить запись на ремонт?</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            	<div class="modal-body" id="deleteDialogTitle"></div>
+				<div class="modal-footer border-0" style="display: flex;">
+                    <button type="button" id="deleteDialogYes" class="btn btn-primary">Удалить запись</button>
+                    <button type="button" id="deleteDialogNo" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                </div>
+            </div>
+        </div>
+    </div>         
+    
+	<!-- actionDialog -->
+    <div class="modal fade" id="actionDialog" tabindex="-1" role="dialog" aria-labelledby="delete-modal-title" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content p-3">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="delete-modal-title">Выберете действие</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="context-menu d-flex gap-2 mt-4">
+                        <div class="flex-1 me-3">
+                            <button type="button" class="btn btn-primary btn-call btn-lg w-100 mb-3" id="btnCall">
+                                Позвонить клиенту
+                            </button>
+                            <button type="button" class="btn btn-success btn-write btn-lg w-100 mb-3" id="btnWrite">
+                                Написать клиенту
+                            </button> 
+                        </div>
+                        <div class="flex-1 me-3">
+                            <button type="button" class="btn btn-warning btn-zn btn-lg w-100 mb-3" id="btnZn">
+                                Создать З/Н
+                            </button>
+                            <button type="button" class="btn btn-danger btn-delete btn-lg w-100 mb-3" id="btnDelete">
+                                Удалить
+                            </button>
+                        </div>
+                    </div> 
+                </div>
+            </div>
+        </div>
+    </div>        
+    <!-- 1С - начало -->
+	<div id="runScript" aria-hidden="true"></div>     
+    <!-- 1С - конец -->
+    
+</body>
+</html>
